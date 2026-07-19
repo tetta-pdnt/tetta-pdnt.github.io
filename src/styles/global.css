@@ -667,6 +667,10 @@ time {
   text-shadow: none;
 }
 
+.mobile-logo {
+  display: none;
+}
+
 .site-header + main {
   padding-top: 1rem;
 }
@@ -1004,7 +1008,13 @@ time {
   }
 
   .ascii-logo {
-    font-size: clamp(9px, 3.2vw, 16px);
+    display: none;
+  }
+
+  .mobile-logo {
+    display: block;
+    width: min(100%, 38rem);
+    height: auto;
   }
 
   .album-overview .collection-card {

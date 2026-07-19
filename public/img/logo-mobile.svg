@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 408 116" role="img" aria-labelledby="title">
+  <title id="title">pdnt-work</title>
+  <style>text { white-space: pre; }</style>
+  <g fill="#5f6254" font-family="SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace" font-size="16" xml:space="preserve">
+    <text x="57.8" y="16">┬      ┬                   ┬</text>
+    <text x="57.8" y="32">│      │                   │</text>
+    <text x="0" y="48">┌─┐ ┌─┤ ┌┐┌ ─┼─ ──── ┬ ┬ ┌─┐ ┬─┐ │┌─</text>
+    <text x="0" y="64">│ │ │ │ │││  │       │││ │ │ │   ├┴┐</text>
+    <text x="0" y="80">├─┘ └─┘ ┘└┘  └┘      └┴┘ └─┘ ┴   ┴ ┴</text>
+    <text x="0" y="96">│</text>
+    <text x="0" y="112">┴</text>
+  </g>
+</svg>
