@@ -29,9 +29,9 @@ jobs:
           token: ${{ secrets.SUBMODULES_TOKEN || github.token }}
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
-      - run: npm ci
+      - run: npm install
       - run: npm run submodules:check
       - run: npm run build
       - uses: actions/configure-pages@v5
