@@ -13,6 +13,7 @@ const VIDEO_MANIFEST = new URL("../content/video.yaml", import.meta.url);
 const CATEGORY_CONFIG = new URL("../content/categories.yaml", import.meta.url);
 const CATEGORIES_OUT_FILE = new URL("../public/data/categories.json", import.meta.url);
 const MAX_ITEMS_PER_FEED = 12;
+const assignMissingIds = process.argv.includes("--assign-missing-ids");
 
 const entityMap = {
   amp: "&",
@@ -139,6 +140,61 @@ function parseYamlManifest(text, section = "items") {
   }
 
   return items;
+}
+
+async function assignMissingYamlIds(manifestUrl) {
+  const text = await readFile(manifestUrl, "utf8");
+  const lines = text.split(/\r?\n/);
+  let changed = false;
+  let inItems = false;
+  let itemStart = -1;
+  let idLine = -1;
+  const additions = [];
+
+  const finishItem = (end) => {
+    if (itemStart < 0) return;
+    if (idLine < 0) {
+      additions.push({ end, line: `    id: ${randomUUID()}` });
+    }
+    itemStart = -1;
+    idLine = -1;
+  };
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+    if (/^[A-Za-z][A-Za-z0-9_-]*:\s*$/.test(line)) {
+      finishItem(index);
+      inItems = line.trim() === "items:";
+      continue;
+    }
+    if (!inItems) continue;
+
+    if (/^\s*-\s+/.test(line)) {
+      finishItem(index);
+      itemStart = index;
+      continue;
+    }
+
+    const id = line.match(/^(\s*id:\s*)(.*)$/);
+    if (itemStart >= 0 && id) {
+      idLine = index;
+      if (!id[2].trim()) {
+        lines[index] = `${id[1]}${randomUUID()}`;
+        changed = true;
+      }
+    }
+  }
+  finishItem(lines.length);
+
+  for (const addition of additions.sort((left, right) => right.end - left.end)) {
+    lines.splice(addition.end, 0, addition.line);
+    changed = true;
+  }
+
+  if (changed) {
+    await writeFile(manifestUrl, `${lines.join("\n").replace(/\n*$/, "")}\n`);
+    console.log(`Assigned missing ids in ${path.basename(manifestUrl.pathname)}.`);
+  }
 }
 
 function parseCategoryConfig(text) {
@@ -426,7 +482,7 @@ async function readTextFile(fileUrl) {
 }
 
 function parseFrontmatter(text) {
-  const match = text.match(/^---\n([\s\S]*?)\n---\n?/);
+  const match = text.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?/);
   if (!match) return { data: {}, body: text };
 
   const data = {};
@@ -477,16 +533,28 @@ function indentFirstJapaneseLine(body) {
   return lines.join("\n");
 }
 function summaryFromMarkdown(body) {
-  return stripHtml(body
+  const summary = stripHtml(body
     .replace(/^#.*$/gm, "")
     .replace(/!\[[^\]]*\]\([^)]*\)/g, "")
     .replace(/\[[^\]]+\]\(([^)]+)\)/g, "$1")
     .replace(/```[\s\S]*?```/g, "")
-    .trim()).slice(0, 220);
+    .trim());
+  return summary.length > 220 ? `${summary.slice(0, 220)}…` : summary;
 }
 
 function imageFromMarkdown(body) {
-  return body.match(/!\[[^\]]*\]\(([^)\s]+)(?:\s+[\'"][^\'"]*[\'"])?\)/)?.[1] ?? "";
+  const image = body.match(/!\[\[([^\]|]+)(?:\|[^\]]*)?\]\]/)?.[1]
+    ?? body.match(/!\[[^\]]*\]\(([^)\s]+)(?:\s+[\'"][^\'"]*[\'"])?\)/)?.[1]
+    ?? "";
+  return publicImagePath(image);
+}
+
+function publicImagePath(value, basePath = "") {
+  if (!value || /^(https?:|data:|\/)/i.test(value)) return value;
+  const imgPath = value.replace(/^(?:\.\/|public\/)?img\//, "");
+  if (imgPath !== value) return `/img/${imgPath}`;
+  if (basePath) return `${basePath.replace(/\/[^/]*$/, "/")}${value}`;
+  return `/img/${value}`;
 }
 
 async function walkFiles(rootUrl, relativeDir = "") {
@@ -547,7 +615,6 @@ async function readExternalConfig() {
     if (error?.code === "ENOENT") {
       return {
         path: "external",
-        type: "writing",
         tags: ["novel"],
         extensions: [".md", ".mdx", ".txt", ".phile"]
       };
@@ -569,6 +636,67 @@ async function externalRoots(config) {
   return entries
     .filter((entry) => entry.isDirectory() && !entry.name.startsWith("."))
     .map((entry) => ({ name: entry.name, rootUrl: new URL(entry.name + "/", externalRoot) }));
+}
+
+async function assignMissingExternalMetadata() {
+  const config = await readExternalConfig();
+  const extensions = new Set(config.extensions ?? [".md", ".mdx", ".txt", ".phile"]);
+  const excluded = new Set(config.exclude ?? []);
+
+  for (const root of await externalRoots(config)) {
+    const rootConfig = config.sources?.[root.name] ?? {};
+    const included = rootConfig.include ? new Set(rootConfig.include) : null;
+    const files = (await walkFiles(root.rootUrl))
+      .filter((file) => extensions.has(path.extname(file).toLowerCase()))
+      .filter((file) => !excluded.has(path.basename(file)))
+      .filter((file) => !included || included.has(file));
+
+    for (const file of files) {
+      const fileUrl = new URL(file, root.rootUrl);
+      const text = await readTextFile(fileUrl);
+      const { data, body } = parseFrontmatter(text);
+      const newline = text.includes("\r\n") ? "\r\n" : "\n";
+      const frontmatter = text.match(/^(---\r?\n)([\s\S]*?)(\r?\n---\r?\n?)/);
+      const metadata = frontmatter?.[2] ?? "";
+      const existingIds = [...metadata.matchAll(/^id:\s*(.+?)\s*$/gm)]
+        .map((match) => match[1])
+        .filter((id) => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id));
+      const id = existingIds[0] ?? randomUUID();
+      const title = String(data.title ?? "").trim() || titleFromContent(body, file);
+      const metadataLines = metadata
+        .split(/\r?\n/)
+        .filter((line) => !/^id:\s*/.test(line))
+        .filter((line) => !/^title:\s*/.test(line));
+      const nextMetadata = [`id: ${id}`, `title: ${yamlString(title)}`, ...metadataLines]
+        .filter((line, index, lines) => line || index < lines.length - 1)
+        .join(newline);
+      const next = frontmatter
+        ? `${frontmatter[1]}${nextMetadata}${frontmatter[3]}${text.slice(frontmatter[0].length)}`
+        : `---${newline}${nextMetadata}${newline}---${newline}${newline}${text}`;
+      if (next === text) continue;
+      await writeFile(fileUrl, next);
+      console.log(`Assigned missing metadata in ${root.name}/${file}.`);
+    }
+  }
+}
+
+async function assignMissingManualItemIds() {
+  try {
+    const payload = JSON.parse(await readFile(MANUAL_ITEMS, "utf8"));
+    let changed = false;
+    for (const item of payload.items ?? []) {
+      if (!String(item.id ?? "").trim()) {
+        item.id = randomUUID();
+        changed = true;
+      }
+    }
+    if (changed) {
+      await writeFile(MANUAL_ITEMS, `${JSON.stringify(payload, null, 2)}\n`);
+      console.log("Assigned missing ids in manual-items.json.");
+    }
+  } catch (error) {
+    if (error?.code !== "ENOENT") throw error;
+  }
 }
 
 async function readExternalItems() {
@@ -599,15 +727,16 @@ async function readExternalItems() {
       const slug = externalPageSlug(source, tags, id);
       const url = pageUrlForSlug(slug);
 
+      const image = publicImagePath(data.image || imageFromMarkdown(body));
+
       items.push({
         id,
         title,
         url,
         publishedAt,
         summary: data.summary || summaryFromMarkdown(body),
-        image: data.image || imageFromMarkdown(body),
+        image,
         source,
-        type: data.type || rootConfig.type || config.type || "writing",
         tags,
         local: true
       });
@@ -617,7 +746,7 @@ async function readExternalItems() {
         slug,
         title,
         body: tags.includes("novel") ? indentFirstJapaneseLine(trimOuterBlankLines(body)) : trimOuterBlankLines(body),
-        image: data.image || imageFromMarkdown(body),
+        image,
         imageAlt: data.imageAlt || "",
         source,
         publishedAt,
@@ -665,6 +794,16 @@ async function fetchFeed(feed) {
   }
 
   return parseFeed(await response.text(), feed);
+}
+
+if (assignMissingIds) {
+  await Promise.all([
+    assignMissingYamlIds(TYPOGRAPHY_MANIFEST),
+    assignMissingYamlIds(MUSIC_MANIFEST),
+    assignMissingYamlIds(VIDEO_MANIFEST),
+    assignMissingExternalMetadata(),
+    assignMissingManualItemIds()
+  ]);
 }
 
 const config = JSON.parse(await readFile(FEED_CONFIG, "utf8"));

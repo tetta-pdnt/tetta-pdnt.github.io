@@ -50,6 +50,15 @@ image: /images/articles/example.webp
 imageAlt: 記事画像の説明
 ```
 
+文章の一部を中央揃えにする場合は、対象のブロックを `::: center` と `:::` で囲みます。囲みの中でも通常のMarkdown記法を使えます。
+
+```md
+::: center
+中央に配置したい文章
+複数行でも書ける
+:::
+```
+
 読み取り設定は `external.config.json` で変更できます。各sourceの `include` にリポジトリ内の相対パスを指定すると、そのファイルだけを読み込みます。frontmatterがあれば `title`, `date`, `publishedAt`, `summary`, `image`, `url`, `tags`, `source`, `type` を使います。なければ見出し、ファイル名、本文から補います。
 
 private repositoryの場合は、すべての作品リポジトリを読み取れるfine-grained PATを

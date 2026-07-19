@@ -2,6 +2,7 @@
 import "../styles/global.css";
 import payload from "../../public/data/pages.json";
 import Breadcrumbs from "../components/Breadcrumbs.astro";
+import { renderMarkdown } from "../lib/markdown.js";
 
 export function getStaticPaths() {
   return (payload.pages ?? []).map((page) => ({ params: { slug: page.slug }, props: { page } }));
@@ -9,8 +10,8 @@ export function getStaticPaths() {
 
 const { page } = Astro.props;
 const published = page.publishedAt ? new Date(page.publishedAt).toLocaleDateString("ja-JP") : "undated";
-const displayBody = page.body.replace(/^　/gm, "\u00a0\u00a0");
-const hasBody = displayBody.trim().length > 0;
+const bodyHtml = renderMarkdown(page.body, { imageBase: page.image });
+const hasBody = page.body.trim().length > 0;
 const directories = page.slug.split("/").slice(0, -1);
 const breadcrumbs = directories.map((label, index) => ({
   label,
@@ -29,10 +30,11 @@ const breadcrumbs = directories.map((label, index) => ({
       <Breadcrumbs items={breadcrumbs} />
       <article class="reader-article">
         <header class="reader-header">
-          <time class="reader-date" datetime={page.publishedAt ?? undefined}>{published}</time>
+          <div class="reader-meta">
+            <time class="reader-date" datetime={page.publishedAt ?? undefined}>{published}</time>
+            <p class="reader-id">{page.id}</p>
+          </div>
           <h1>{page.title}</h1>
-          <p class="reader-id">id: {page.id}</p>
-          <div class="tag-row">{page.tags.map((tag) => <span class="tag" data-tag={tag}>{tag}</span>)}</div>
         </header>
         {page.image && page.source === "typography" ? (
           <>
@@ -44,8 +46,8 @@ const breadcrumbs = directories.map((label, index) => ({
               <img src={page.image} alt={page.imageAlt ?? ""} />
             </dialog>
           </>
-        ) : page.image && <img class="reader-cover" src={page.image} alt={page.imageAlt ?? ""} />}
-        {hasBody && <pre class="reader-body">{displayBody}</pre>}
+        ) : null}
+        {hasBody && <div class="reader-body" set:html={bodyHtml} />}
       </article>
     </main>
     {page.source === "typography" && (

@@ -28,9 +28,11 @@ const videoId = source.pathname.startsWith("/shorts/") ? source.pathname.split("
       <Breadcrumbs items={[{ label: "video", href: "/video/" }]} />
       <article class="media-article">
         <header class="reader-header">
-          <time class="reader-date" datetime={item.publishedAt ?? undefined}>{published}</time>
+          <div class="reader-meta">
+            <time class="reader-date" datetime={item.publishedAt ?? undefined}>{published}</time>
+            <p class="reader-id">{item.id}</p>
+          </div>
           <h1>{item.title}</h1>
-          <p class="reader-id">id: {item.id}</p>
           {item.summary && <p class="reader-summary">{item.summary}</p>}
         </header>
         <div class="embed-frame youtube-frame">
