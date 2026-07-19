@@ -1,0 +1,35 @@
+---
+import "../styles/global.css";
+---
+
+<html lang="ja">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="pdnt-work">
+    <title>pdnt-work</title>
+    <script type="module" src="/scripts/app.js"></script>
+  </head>
+  <body>
+    <header class="site-header">
+      <pre class="ascii-logo" aria-label="pdnt-work">      ┬      ┬                   ┬  
+      │      │                   │  
+┌─┐ ┌─┤ ┌┐┌ ─┼─ ──── ┬ ┬ ┌─┐ ┬─┐ │┌─
+│ │ │ │ │││  │       │││ │ │ │   ├┴┐
+├─┘ └─┘ ┘└┘  └┘      └┴┘ └─┘ ┴   ┴ ┴
+│                                   
+┴                                   </pre>
+    </header>
+
+    <main>
+      <section class="console" aria-label="Filter controls">
+        <div>
+          <div class="tabs" id="filters"></div>
+        </div>
+        <p class="updated" id="updated">更新を読み込み中</p>
+      </section>
+
+      <section class="tree-panel" id="feed" aria-live="polite"></section>
+    </main>
+  </body>
+</html>

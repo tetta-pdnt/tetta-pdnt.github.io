@@ -1,0 +1,61 @@
+---
+import "../styles/global.css";
+import { readFile } from "node:fs/promises";
+import path from "node:path";
+import Breadcrumbs from "../components/Breadcrumbs.astro";
+
+const payload = JSON.parse(await readFile(path.join(process.cwd(), "public/data/items.json"), "utf8"));
+const tracks = (payload.items ?? []).filter((item) => item.source === "SoundCloud");
+const albumCards = (payload.musicAlbums ?? [])
+  .filter((album) => album.image)
+  .map((album) => ({
+    kind: "album",
+    album,
+    publishedAt: Math.max(...tracks.filter((track) => track.album === album.path).map((track) => Date.parse(track.publishedAt) || 0))
+  }));
+const albumPaths = new Set(albumCards.map(({ album }) => album.path));
+const cards = [
+  ...albumCards,
+  ...tracks.filter((track) => !albumPaths.has(track.album)).map((track) => ({ kind: "track", track, publishedAt: Date.parse(track.publishedAt) || 0 }))
+].sort((left, right) => right.publishedAt - left.publishedAt);
+---
+
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>music / pdnt-work</title>
+  </head>
+  <body>
+    <main class="reader-shell collection-shell">
+      <Breadcrumbs items={[]} />
+      <header class="collection-header">
+        <h1>music/</h1>
+        <p class="reader-file">{tracks.length} tracks</p>
+      </header>
+      <section class="collection-grid" aria-label="music">
+        {cards.map((card) => card.kind === "album" ? (
+          <a class="collection-card directory-card" href={`/music/${encodeURIComponent(card.album.path)}/`}>
+            <img src={card.album.image} alt={`${card.album.title} cover`} loading="lazy" />
+            <div class="collection-card-body">
+              <h2>{card.album.title}</h2>
+              {card.album.summary && <p class="collection-summary">{card.album.summary}</p>}
+            </div>
+          </a>
+        ) : (
+          <a class="collection-card" href={card.track.url}>
+            {card.track.image && <img src={card.track.image} alt="" loading="lazy" />}
+            <div class="collection-card-body">
+              <p class="collection-meta">{card.track.publishedAt ? new Date(card.track.publishedAt).toLocaleDateString("ja-JP") : "undated"}</p>
+              <h2>{card.track.title}</h2>
+              {card.track.summary && <p class="collection-summary">{card.track.summary}</p>}
+              <div class="tag-row">
+                {card.track.tags.map((tag) => <span class="tag" data-tag={tag}>{tag}</span>)}
+              </div>
+            </div>
+          </a>
+        ))}
+      </section>
+    </main>
+  </body>
+</html>

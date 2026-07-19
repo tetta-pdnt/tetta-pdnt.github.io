@@ -1,0 +1,46 @@
+---
+import "../../styles/global.css";
+import { readFile } from "node:fs/promises";
+import path from "node:path";
+import Breadcrumbs from "../../components/Breadcrumbs.astro";
+
+export async function getStaticPaths() {
+  const payload = JSON.parse(await readFile(path.join(process.cwd(), "public/data/items.json"), "utf8"));
+  return (payload.items ?? [])
+    .filter((item) => item.source === "SoundCloud" && !item.album)
+    .map((item) => ({ params: { slug: item.id }, props: { item } }));
+}
+
+const { item } = Astro.props;
+const published = item.publishedAt ? new Date(item.publishedAt).toLocaleDateString("ja-JP") : "undated";
+const playerUrl = "https://w.soundcloud.com/player/?url=" + encodeURIComponent(item.sourceUrl) + "&color=%2388bbba&auto_play=false&hide_related=true&show_comments=false&show_user=true&show_reposts=false&show_teaser=false&visual=true";
+---
+
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{item.title} / music / pdnt-work</title>
+  </head>
+  <body>
+    <main class="reader-shell media-shell">
+      <Breadcrumbs items={[{ label: "music", href: "/music/" }]} />
+      <article class="media-article">
+        <header class="reader-header">
+          <time class="reader-date" datetime={item.publishedAt ?? undefined}>{published}</time>
+          <h1>{item.title}</h1>
+          <p class="reader-id">id: {item.id}</p>
+          {item.summary && <p class="reader-summary">{item.summary}</p>}
+        </header>
+        <div class="embed-frame soundcloud-frame">
+          <iframe
+            scrolling="no"
+            src={playerUrl}
+            title={item.title}
+          ></iframe>
+        </div>
+        <p class="media-source"><a href={item.sourceUrl} target="_blank" rel="noreferrer">open on soundcloud</a></p>
+      </article>
+    </main>
+  </body>
+</html>

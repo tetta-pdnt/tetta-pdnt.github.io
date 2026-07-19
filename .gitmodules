@@ -1,0 +1,9 @@
+[submodule "external/snippets"]
+	path = external/snippets
+	url = https://github.com/writings-tetta/snippets.git
+[submodule "external/estivation"]
+	path = external/estivation
+	url = https://github.com/writings-tetta/estivation.git
+[submodule "external/orbit"]
+	path = external/orbit
+	url = https://github.com/writings-tetta/orbit.git

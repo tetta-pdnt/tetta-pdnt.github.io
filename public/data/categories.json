@@ -1,0 +1,26 @@
+{
+  "categories": [
+    {
+      "key": "music"
+    },
+    {
+      "key": "typography"
+    },
+    {
+      "key": "video"
+    },
+    {
+      "key": "writing",
+      "children": [
+        "novel",
+        "prose",
+        "vignette",
+        "article",
+        "poem"
+      ]
+    },
+    {
+      "key": "dev"
+    }
+  ]
+}

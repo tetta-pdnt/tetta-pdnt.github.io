@@ -1,0 +1,81 @@
+---
+import "../styles/global.css";
+import { readFile } from "node:fs/promises";
+import path from "node:path";
+import categoryPayload from "../../public/data/categories.json";
+import Breadcrumbs from "../components/Breadcrumbs.astro";
+
+export function getStaticPaths() {
+  const categories = [
+    ...categoryPayload.categories
+      .filter((category) => !category.children && category.key !== "music"),
+    { key: "all", all: true },
+    { key: "misc", fallback: true }
+  ];
+
+  return categories.map((category) => ({
+    params: { category: category.key },
+    props: { category }
+  }));
+}
+
+const { category } = Astro.props;
+const payload = JSON.parse(await readFile(path.join(process.cwd(), "public/data/items.json"), "utf8"));
+const knownTags = ["video", "typography", "music", "prose", "novel", "vignette", "article", "poem", "dev"];
+const items = (payload.items ?? []).filter((item) =>
+  category.all
+    ? true
+    : category.fallback
+    ? !(item.tags ?? []).some((tag) => knownTags.includes(tag))
+    : item.tags?.includes(category.key)
+);
+
+function itemHref(item) {
+  return item.url;
+}
+
+function formatDate(value) {
+  return value ? new Date(value).toLocaleDateString("ja-JP") : "undated";
+}
+---
+
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{category.key} / pdnt-work</title>
+  </head>
+  <body>
+    <main class="reader-shell collection-shell" data-category={category.key}>
+      <Breadcrumbs items={[]} />
+      <header class="collection-header">
+        <h1>{category.key}/</h1>
+        <p class="reader-file">{items.length} items</p>
+      </header>
+      {items.length ? (
+        <section class="collection-grid" aria-label={`${category.key} items`}>
+          {items.map((item) => (
+            <a
+              class="collection-card"
+              href={itemHref(item)}
+              target={!item.local ? "_blank" : undefined}
+              rel={!item.local ? "noreferrer" : undefined}
+            >
+              {item.image && <img src={item.image} alt="" loading="lazy" />}
+              <div class="collection-card-body">
+                <p class="collection-meta">{formatDate(item.publishedAt)}</p>
+                <h2>{item.title}</h2>
+                {item.summary && <p class="collection-summary">{item.summary}</p>}
+                <div class="tag-row">
+                  {(item.tags ?? []).map((tag) => <span class="tag" data-tag={tag}>{tag}</span>)}
+                </div>
+              </div>
+            </a>
+          ))}
+        </section>
+      ) : (
+        <p class="empty">no items in this category</p>
+      )}
+    </main>
+  </body>
+</html>

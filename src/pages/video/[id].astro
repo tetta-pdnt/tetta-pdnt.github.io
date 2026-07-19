@@ -1,0 +1,48 @@
+---
+import "../../styles/global.css";
+import { readFile } from "node:fs/promises";
+import path from "node:path";
+import Breadcrumbs from "../../components/Breadcrumbs.astro";
+
+export async function getStaticPaths() {
+  const payload = JSON.parse(await readFile(path.join(process.cwd(), "public/data/items.json"), "utf8"));
+  return (payload.items ?? [])
+    .filter((item) => item.source === "YouTube")
+    .map((item) => ({ params: { id: item.id }, props: { item } }));
+}
+
+const { item } = Astro.props;
+const published = item.publishedAt ? new Date(item.publishedAt).toLocaleDateString("ja-JP") : "undated";
+const source = new URL(item.sourceUrl);
+const videoId = source.pathname.startsWith("/shorts/") ? source.pathname.split("/")[2] : source.searchParams.get("v") || source.pathname.split("/").filter(Boolean).at(-1);
+---
+
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{item.title} / video / pdnt-work</title>
+  </head>
+  <body>
+    <main class="reader-shell media-shell">
+      <Breadcrumbs items={[{ label: "video", href: "/video/" }]} />
+      <article class="media-article">
+        <header class="reader-header">
+          <time class="reader-date" datetime={item.publishedAt ?? undefined}>{published}</time>
+          <h1>{item.title}</h1>
+          <p class="reader-id">id: {item.id}</p>
+          {item.summary && <p class="reader-summary">{item.summary}</p>}
+        </header>
+        <div class="embed-frame youtube-frame">
+          <iframe
+            src={"https://www.youtube.com/embed/" + videoId}
+            title={item.title}
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            allowfullscreen
+          ></iframe>
+        </div>
+        <p class="media-source"><a href={item.sourceUrl} target="_blank" rel="noreferrer">open on youtube</a></p>
+      </article>
+    </main>
+  </body>
+</html>

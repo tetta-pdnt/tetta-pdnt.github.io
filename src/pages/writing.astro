@@ -1,0 +1,45 @@
+---
+import "../styles/global.css";
+import { readFile } from "node:fs/promises";
+import path from "node:path";
+import categoryPayload from "../../public/data/categories.json";
+import Breadcrumbs from "../components/Breadcrumbs.astro";
+
+const writingTags = categoryPayload.categories.find((category) => category.key === "writing")?.children ?? [];
+const payload = JSON.parse(await readFile(path.join(process.cwd(), "public/data/items.json"), "utf8"));
+const items = (payload.items ?? []).filter((item) => writingTags.some((tag) => item.tags?.includes(tag)));
+
+function itemHref(item) {
+  return item.url;
+}
+---
+
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>writing / pdnt-work</title>
+  </head>
+  <body>
+    <main class="reader-shell collection-shell">
+      <Breadcrumbs items={[]} />
+      <header class="collection-header">
+        <h1>writing/</h1>
+        <p class="reader-file">{items.length} items</p>
+      </header>
+      <section class="collection-grid" aria-label="writing items">
+        {items.map((item) => (
+          <a class="collection-card" href={itemHref(item)}>
+            {item.image && <img src={item.image} alt="" loading="lazy" />}
+            <div class="collection-card-body">
+              <p class="collection-meta">{item.publishedAt ? new Date(item.publishedAt).toLocaleDateString("ja-JP") : "undated"}</p>
+              <h2>{item.title}</h2>
+              {item.summary && <p class="collection-summary">{item.summary}</p>}
+              <div class="tag-row">{(item.tags ?? []).map((tag) => <span class="tag" data-tag={tag}>{tag}</span>)}</div>
+            </div>
+          </a>
+        ))}
+      </section>
+    </main>
+  </body>
+</html>

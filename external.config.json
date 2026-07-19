@@ -1,0 +1,43 @@
+{
+  "path": "external",
+  "type": "writing",
+  "tags": [
+    "novel"
+  ],
+  "extensions": [
+    ".md",
+    ".mdx",
+    ".txt",
+    ".phile"
+  ],
+  "sources": {
+    "snippets": {
+      "source": "snippets",
+      "tags": [
+        "vignette"
+      ]
+    },
+    "estivation": {
+      "source": "estivation",
+      "include": [
+        "夏眠.md"
+      ],
+      "tags": [
+        "novel"
+      ]
+    },
+    "orbit": {
+      "source": "orbit",
+      "include": [
+        "眼窩.md"
+      ],
+      "tags": [
+        "novel"
+      ]
+    }
+  },
+  "exclude": [
+    "README.md",
+    "README.txt"
+  ]
+}

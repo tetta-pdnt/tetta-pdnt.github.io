@@ -1,0 +1,116 @@
+# albums accepts: path (URL segment), title, image, link, summary, date, sc (SoundCloud URL).
+albums:
+  - title: "$enj0gahara H!tag1"
+    path: senjogahara-hitagi
+    link: https://pedantophile.bandcamp.com/album/enj0gahara-h-tag1
+    image: https://f4.bcbits.com/img/a3124088554_2.jpg
+    date: 2024-5-26
+  - title: "Øshin0 (o)ug!"
+    path: oshino-ougi
+    link: https://pedantophile.bandcamp.com/album/shin0-o-ug
+    image: https://f4.bcbits.com/img/a0889516171_2.jpg
+    date: 2025-09-05
+  - title: "Ҡa¡k! Dεiƨɥu"
+    path: kaiki-deishu
+
+items:
+  - title: "／v＼oving^2"
+    id: cb39f770-9e60-5ffb-a442-2bdfef4dab2b
+    date: 2020-12-06
+    url: "https://soundcloud.com/pedantophile/voving2-1"
+    image: "https://i1.sndcdn.com/artworks-a1yXNJPOaK6CtBn8-cd4Bbw-t3000x3000.jpg"
+  - title: "Click here for new happiness!"
+    id: 9d640a46-b1e2-5ed4-a37e-cd57ae1be28b
+    date: 2021-01-01
+    url: "https://soundcloud.com/pedantophile/click-here-for-new-happiness"
+    image: "https://i1.sndcdn.com/artworks-f8i3O5I422nzImSN-unEh3g-t3000x3000.jpg"
+  - title: "luv it so much 1m 4fraid 1m 10st in m4 mind.<3"
+    id: ce7a2bfe-93b1-52fe-9d5b-828a066c7b25
+    date: 2024-04-07
+    url: "https://soundcloud.com/pedantophile/luv-it-so-much-1m-4fraid-1m-10st-in-m4-mind3"
+    image: "https://i1.sndcdn.com/artworks-cSmstPGCa3Y972BS-9sGcKQ-t3000x3000.jpg"
+    album: "$enj0gahara H!tag1"
+  - title: "60d, ju57 1uv m3 n0rm411y, ju57 0nc3 1n 4 wh113.<3"
+    id: c34e5ef0-5111-5052-beb5-007c1ab049f6
+    date: 2024-04-21
+    url: "https://soundcloud.com/pedantophile/60d-ju57-1uv-m3-n0rm411y-ju57-0nc3-1n-4-wh1133"
+    image: "https://i1.sndcdn.com/artworks-KFsFgvz0ElEZFdUG-qm7frg-t3000x3000.jpg"
+    album: "$enj0gahara H!tag1"
+  - title: "1n c0n5um971v3 4c71v17y, 1n d163571v3 4c71v17y, 1n 3xcr370ry 4c71v17y.<3"
+    id: 394da59a-352a-525c-bcab-5828b298bf33
+    date: 2024-04-27
+    url: "https://soundcloud.com/pedantophile/1n-c0n5um971v3-4c71v17y-1n-d163571v3-4c71v17y-1n-3xcr370ry-4c71v17y3-1"
+    image: "https://i1.sndcdn.com/artworks-iDSCYLn1B3UntyQy-89uVeg-t3000x3000.jpg"
+    album: "$enj0gahara H!tag1"
+  - title: "B3 cr34t1v3, run thr0ugh th3 un1v3r53 4nd 1nt0 th3 futur3, 4r0und th3 64l4xy.<3"
+    id: 451a1f65-103e-5c48-a1d9-cdd40a9aca4d
+    date: 2024-04-29
+    url: "https://soundcloud.com/pedantophile/ghostorycore4"
+    image: "https://i1.sndcdn.com/artworks-8JOy04XaAINYE5zq-xS0uVQ-t3000x3000.jpg"
+    album: "$enj0gahara H!tag1"
+  - title: "1'm 100k1n6 f0rw4rd 2 17.<3"
+    id: 335b35ea-4c93-58dc-862c-054bb8a5c11b
+    date: 2024-05-26
+    url: "https://soundcloud.com/pedantophile/kodokushi"
+    image: "https://i1.sndcdn.com/artworks-Ia8n7VFwZyyDvD4S-y1224A-t3000x3000.jpg"
+    album: "$enj0gahara H!tag1"
+  - title: "u can 1augH at m3 a11 u want.<3"
+    id: d329e9b4-4113-5600-bb5d-675c75d023d2
+    date: 2024-06-26
+    url: "https://soundcloud.com/pedantophile/u-can-1augh-at-m3-a11-u-want"
+    image: "https://i1.sndcdn.com/artworks-cz85AsguDMZ0zyWE-izse8A-t3000x3000.jpg"
+    album: "Øshin0 (o)ug!"
+  - title: "chok1ng, chok1n9, ch0k1n9, ch0k!n9.<3"
+    id: 8781f8cf-8e74-5c70-8701-fe6232ac1fc5
+    date: 2024-06-26
+    url: "https://soundcloud.com/pedantophile/non-breath-oblige"
+    image: "https://i1.sndcdn.com/artworks-l8MCqb6342sXDaFX-BrQvTQ-t3000x3000.jpg"
+    album: "Øshin0 (o)ug!"
+  - title: "unr3aL po//3R wat3R.<3"
+    id: 05df97ec-5546-5791-ad52-4aaabf1d3efe
+    date: 2024-09-13
+    url: "https://soundcloud.com/pedantophile/unr3al-pow3r-wat3r"
+    image: "https://i1.sndcdn.com/artworks-xzWL2EiJqdvkQRKy-leePdA-t3000x3000.jpg"
+    album: "Øshin0 (o)ug!"
+  - title: "ΔDHD str4wb3rry M!LK.<3"
+    id: e6870fb1-9b28-5391-b9b1-a74b61d3ab67
+    date: 2025-01-26
+    url: "https://soundcloud.com/pedantophile/adhd-str4wb3rry-milk"
+    image: "https://i1.sndcdn.com/artworks-vrIp7Fsk5Irig3t6-uXc0eg-t3000x3000.jpg"
+    album: "Øshin0 (o)ug!"
+  - title: "pedantophile @Kawaii Capitalism"
+    id: 7c6cefb1-aeec-5f8c-ac5b-693ee83e7c69
+    date: 2025-06-28
+    url: "https://soundcloud.com/pedantophile/kawaii-capitalism"
+    image: "https://i1.sndcdn.com/artworks-WICzmwIUXEo71V6Q-IQW4mw-t3000x3000.png"
+  - title: "wh4t U c = wh4t U luv.<3"
+    id: d1bf1dc0-6d97-55dd-89e7-e88fddd804d6
+    date: 2025-09-05
+    url: "https://soundcloud.com/pedantophile/wysiwyl"
+    image: "https://i1.sndcdn.com/artworks-OSxk0kZQYfqaBlXm-b8LRQQ-t3000x3000.png"
+    album: "Øshin0 (o)ug!"
+  - title: "m0r ƎÜЯT thæn TRÜE.<3"
+    id: e335f0a7-006b-5e41-82ac-b53cc9206d53
+    date: 2025-11-02
+    url: "https://soundcloud.com/pedantophile/more-true-than-true"
+    image: "https://i1.sndcdn.com/artworks-RqdTuhFGVccEF114-7ZjfaA-t3000x3000.png"
+    album: "Ҡa¡k! Dεiƨɥu"
+  - title: "K13!n-G0rd∅n !z ñ0t d34d.<3"
+    id: b7737ad1-ec8d-5dda-8950-af086f0fe7c3
+    date: 2026-03-21
+    url: "https://soundcloud.com/pedantophile/klein-gordon-is-not-dead"
+    image: "https://i1.sndcdn.com/artworks-B8BVCwN54HQWSDfu-tlQjpA-t3000x3000.jpg"
+    album: "Ҡa¡k! Dεiƨɥu"
+  - title: "VOCALOID DELUSION"
+    id: 20f676b2-8bf7-59d9-ba90-e10b0478614b
+    date: 2026-04-29
+    url: "https://soundcloud.com/pedantophile/vocaloid-delusion"
+    image: "https://i1.sndcdn.com/artworks-xItYhRUWxMx5WYEd-NjDvIw-t3000x3000.jpg"
+    summary: "極未来倶楽部 - Hyper Future Club 01 w/ @idkrhythm"
+  - title: "∃ven d4 sma11est Hand$.<3 (pdnt flip)"
+    id: 00ada61c-9f54-5755-8ae9-a89b6e333525
+    date: 2026-04-29
+    url: "https://soundcloud.com/pedantophile/even-the-smallest-hands-pdnt"
+    image: "https://i1.sndcdn.com/artworks-zFwsbuBL2RmvZ89M-KcRNbg-t3000x3000.jpg"
+    summary: "極未来倶楽部 - Hyper Future Club 01 | <3 https://soundcloud.com/s_g4ne/0222-d"
+    album: "Ҡa¡k! Dεiƨɥu"

@@ -1,0 +1,51 @@
+---
+import "../../styles/global.css";
+import { readFile } from "node:fs/promises";
+import path from "node:path";
+
+export async function getStaticPaths() {
+  return [];
+  /* Legacy route retained only to avoid a breaking source-file rename. */
+  const youtubeId = (url) => {
+    const parsed = new URL(url);
+    if (parsed.pathname.startsWith("/shorts/")) return parsed.pathname.split("/")[2];
+    return parsed.searchParams.get("v") || parsed.pathname.split("/").filter(Boolean).at(-1);
+  };
+  const payload = JSON.parse(await readFile(path.join(process.cwd(), "public/data/items.json"), "utf8"));
+  return (payload.items ?? [])
+    .filter((item) => item.source === "YouTube")
+    .map((item) => ({ params: { id: youtubeId(item.url) }, props: { item, id: youtubeId(item.url) } }));
+}
+
+const { item, id } = Astro.props;
+const published = item.publishedAt ? new Date(item.publishedAt).toLocaleDateString("ja-JP") : "undated";
+---
+
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{item.title} / YouTube / pdnt-work</title>
+  </head>
+  <body>
+    <main class="reader-shell media-shell">
+      <nav class="reader-nav"><a href="/">../index</a></nav>
+      <article class="media-article">
+        <header class="reader-header">
+          <p class="section-title">~ YouTube / {published}</p>
+          <h1>{item.title}</h1>
+          {item.summary && <p class="reader-file">{item.summary}</p>}
+        </header>
+        <div class="embed-frame youtube-frame">
+          <iframe
+            src={"https://www.youtube.com/embed/" + id}
+            title={item.title}
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            allowfullscreen
+          ></iframe>
+        </div>
+        <p class="media-source"><a href={item.url} target="_blank" rel="noreferrer">open on youtube</a></p>
+      </article>
+    </main>
+  </body>
+</html>

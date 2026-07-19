@@ -1,0 +1,20 @@
+{
+  "feeds": [
+    {
+      "title": "YouTube",
+      "url": "https://www.youtube.com/feeds/videos.xml?channel_id=UCfYcTwJJhn4LMoNUN-zWAaA",
+      "type": "video",
+      "tags": [
+        "video"
+      ]
+    },
+    {
+      "title": "SoundCloud",
+      "url": "https://feeds.soundcloud.com/users/soundcloud:users:234009938/sounds.rss",
+      "type": "music",
+      "tags": [
+        "music"
+      ]
+    }
+  ]
+}

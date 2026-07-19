@@ -1,0 +1,104 @@
+---
+import "../../styles/global.css";
+import { readFile } from "node:fs/promises";
+import path from "node:path";
+import Breadcrumbs from "../../components/Breadcrumbs.astro";
+
+export async function getStaticPaths() {
+  const payload = JSON.parse(await readFile(path.join(process.cwd(), "public/data/items.json"), "utf8"));
+  const tracks = (payload.items ?? []).filter((item) => item.source === "SoundCloud" && item.album);
+  const albums = payload.musicAlbums ?? [];
+  return [
+    ...albums.map((album) => ({
+      params: { slug: album.path },
+      props: { album, tracks: tracks.filter((item) => item.album === album.path) }
+    })),
+    ...tracks.map((item) => ({
+      params: { slug: `${item.album}/${item.id}` },
+      props: { item }
+    }))
+  ];
+}
+
+const { item, album, tracks = [] } = Astro.props;
+const published = item?.publishedAt ? new Date(item.publishedAt).toLocaleDateString("ja-JP") : "undated";
+const playerUrl = item ? "https://w.soundcloud.com/player/?url=" + encodeURIComponent(item.sourceUrl) + "&color=%2388bbba&auto_play=false&hide_related=true&show_comments=false&show_user=true&show_reposts=false&show_teaser=false&visual=true" : "";
+const albumDate = album?.publishedAt ? new Date(album.publishedAt).toLocaleDateString("ja-JP") : "";
+const trackHref = (track) => track.url;
+---
+
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{album ? album.title : item.title + " / " + item.albumTitle} / music / pdnt-work</title>
+  </head>
+  <body>
+    {album ? (
+      <main class="reader-shell collection-shell">
+        <Breadcrumbs items={[{ label: "music", href: "/music/" }]} />
+        {album.image ? (
+          <section class="collection-grid album-overview" aria-label={`${album.title} album`}>
+            {album.link ? (
+              <a class="collection-card" href={album.link} target="_blank" rel="noreferrer">
+                <img src={album.image} alt={`${album.title} cover`} />
+                <div class="collection-card-body album-card-body">
+                  {albumDate && <p class="collection-meta album-date">{albumDate}</p>}
+                  <p class="collection-meta">{tracks.length} tracks</p>
+                  <h2>{album.title}</h2>
+                  {album.summary && <p class="collection-summary">{album.summary}</p>}
+                </div>
+              </a>
+            ) : (
+              <div class="collection-card">
+                <img src={album.image} alt={`${album.title} cover`} />
+                <div class="collection-card-body album-card-body">
+                  {albumDate && <p class="collection-meta album-date">{albumDate}</p>}
+                  <p class="collection-meta">{tracks.length} tracks</p>
+                  <h2>{album.title}</h2>
+                  {album.summary && <p class="collection-summary">{album.summary}</p>}
+                </div>
+              </div>
+            )}
+          </section>
+        ) : (
+          <header class="collection-header">
+            <h1>{album.title}/</h1>
+            {albumDate && <p class="collection-meta">{albumDate}</p>}
+            <p class="reader-file">{tracks.length} tracks</p>
+            {album.summary && <p class="collection-summary">{album.summary}</p>}
+            {album.link && <p class="media-source"><a href={album.link} target="_blank" rel="noreferrer">open album</a></p>}
+          </header>
+        )}
+        <section class="collection-grid" aria-label={`${album.title} tracks`}>
+          {tracks.map((track) => (
+            <a class="collection-card" href={trackHref(track)}>
+              {track.image && <img src={track.image} alt="" loading="lazy" />}
+              <div class="collection-card-body">
+                <p class="collection-meta">{track.publishedAt ? new Date(track.publishedAt).toLocaleDateString("ja-JP") : "undated"}</p>
+                <h2>{track.title}</h2>
+                {track.summary && <p class="collection-summary">{track.summary}</p>}
+              </div>
+            </a>
+          ))}
+        </section>
+      </main>
+    ) : (
+    <main class="reader-shell media-shell">
+      <Breadcrumbs items={[{ label: "music", href: "/music/" }, { label: item.albumTitle, href: `/music/${encodeURIComponent(item.album)}/` }]} />
+      <article class="media-article">
+        <header class="reader-header">
+          <time class="reader-date" datetime={item.publishedAt ?? undefined}>{published}</time>
+          <h1>{item.title}</h1>
+          <p class="reader-id">id: {item.id}</p>
+          {item.summary && <p class="reader-summary">{item.summary}</p>}
+        </header>
+        <div class="embed-frame soundcloud-frame">
+          <iframe scrolling="no" src={playerUrl} title={item.title}></iframe>
+        </div>
+        <p class="media-source"><a href={item.sourceUrl} target="_blank" rel="noreferrer">open on soundcloud</a></p>
+      </article>
+    </main>
+    )}
+  </body>
+</html>

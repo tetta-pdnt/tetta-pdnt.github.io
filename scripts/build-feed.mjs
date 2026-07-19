@@ -1,0 +1,737 @@
+import { appendFile, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import path from "node:path";
+
+const FEED_CONFIG = new URL("../feeds.json", import.meta.url);
+const OUT_FILE = new URL("../public/data/items.json", import.meta.url);
+const PAGES_OUT_FILE = new URL("../public/data/pages.json", import.meta.url);
+const MANUAL_ITEMS = new URL("../manual-items.json", import.meta.url);
+const EXTERNAL_CONFIG = new URL("../external.config.json", import.meta.url);
+const TYPOGRAPHY_MANIFEST = new URL("../content/typography.yaml", import.meta.url);
+const MUSIC_MANIFEST = new URL("../content/music.yaml", import.meta.url);
+const VIDEO_MANIFEST = new URL("../content/video.yaml", import.meta.url);
+const CATEGORY_CONFIG = new URL("../content/categories.yaml", import.meta.url);
+const CATEGORIES_OUT_FILE = new URL("../public/data/categories.json", import.meta.url);
+const MAX_ITEMS_PER_FEED = 12;
+
+const entityMap = {
+  amp: "&",
+  lt: "<",
+  gt: ">",
+  quot: "\"",
+  apos: "'",
+  nbsp: " "
+};
+
+function decodeEntities(value = "") {
+  return value
+    .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1")
+    .replace(/&#(\d+);/g, (_, code) => String.fromCodePoint(Number(code)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, code) => String.fromCodePoint(Number.parseInt(code, 16)))
+    .replace(/&([a-z]+);/gi, (_, key) => entityMap[key] ?? `&${key};`)
+    .trim();
+}
+
+function stripHtml(value = "") {
+  return decodeEntities(value.replace(/<[^>]+>/g, " ").replace(/\s+/g, " "));
+}
+
+function firstTag(block, names) {
+  for (const name of names) {
+    const pattern = new RegExp(`<${name}(?:\\s[^>]*)?>([\\s\\S]*?)<\\/${name}>`, "i");
+    const match = block.match(pattern);
+    if (match) return decodeEntities(match[1]);
+  }
+  return "";
+}
+
+function attrTag(block, name, attr) {
+  const pattern = new RegExp("<" + name + "[^>]*\\s" + attr + "=[\"\']([^\"\']+)[\"\'][^>]*>", "i");
+  return decodeEntities(block.match(pattern)?.[1] ?? "");
+}
+
+function tagWithAttr(block, name, attr, valuePattern) {
+  const pattern = new RegExp("<" + name + "[^>]*\\s" + attr + "=[\"\']" + valuePattern + "[\"\'][^>]*>", "i");
+  return block.match(pattern)?.[0] ?? "";
+}
+
+function imageEnclosure(block) {
+  const enclosure = tagWithAttr(block, "enclosure", "type", "image/[^\"']+");
+  return enclosure ? attrTag(enclosure, "enclosure", "url") : "";
+}
+
+function firstImage(block) {
+  const html = firstTag(block, ["description", "summary", "content:encoded", "content"]);
+
+  return attrTag(block, "itunes:image", "href")
+    || attrTag(block, "media:thumbnail", "url")
+    || firstTag(block, ["media:thumbnail"])
+    || attrTag(tagWithAttr(block, "media:content", "type", "image/[^\"']+"), "media:content", "url")
+    || imageEnclosure(block)
+    || attrTag(html, "img", "src")
+    || "";
+}
+
+function blocksFor(xml) {
+  const itemBlocks = [...xml.matchAll(/<item(?:\s[^>]*)?>([\s\S]*?)<\/item>/gi)].map((m) => m[1]);
+  if (itemBlocks.length) return itemBlocks;
+  return [...xml.matchAll(/<entry(?:\s[^>]*)?>([\s\S]*?)<\/entry>/gi)].map((m) => m[1]);
+}
+
+function normalizeDate(value) {
+  const date = value ? new Date(value) : null;
+  return date && !Number.isNaN(date.valueOf()) ? date.toISOString() : null;
+}
+
+function pageId(value, context) {
+  const id = String(value ?? "").toLowerCase();
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(id)) {
+    throw new Error(`${context} needs a UUID-format id.`);
+  }
+  return id;
+}
+
+const legacyTagKeys = {
+  "映像": "video",
+  "タイポグラフィー": "typography",
+  "音楽": "music",
+  "散文": "prose",
+  "日記": "prose",
+  "小説": "novel",
+  "開発": "dev"
+};
+
+function normalizeTags(tags = []) {
+  return [...new Set(tags.map((tag) => legacyTagKeys[tag] ?? tag))];
+}
+
+function parseYamlValue(value) {
+  const trimmed = value.trim();
+  if (!trimmed || trimmed === "null") return "";
+  if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
+    return trimmed.slice(1, -1).split(",").map((part) => parseYamlValue(part)).filter(Boolean);
+  }
+  return trimmed.replace(/^["']|["']$/g, "");
+}
+
+function parseYamlManifest(text, section = "items") {
+  const items = [];
+  let current;
+  let inSection = false;
+
+  for (const line of text.split(/\r?\n/)) {
+    if (!line.trim() || line.trimStart().startsWith("#")) continue;
+    if (/^[A-Za-z][A-Za-z0-9_-]*:\s*$/.test(line)) {
+      inSection = line.trim() === `${section}:`;
+      current = undefined;
+      continue;
+    }
+    if (!inSection) continue;
+    const entry = line.match(/^\s*-\s+([A-Za-z][A-Za-z0-9_-]*):\s*(.*)$/)
+      ?? line.match(/^\s+([A-Za-z][A-Za-z0-9_-]*):\s*(.*)$/);
+    if (!entry) continue;
+
+    if (line.match(/^\s*-\s+/)) {
+      current = {};
+      items.push(current);
+    }
+    if (current) current[entry[1]] = parseYamlValue(entry[2]);
+  }
+
+  return items;
+}
+
+function parseCategoryConfig(text) {
+  const categories = [];
+  let current;
+  let inCategories = false;
+  let rootIndent;
+
+  for (const line of text.split(/\r?\n/)) {
+    if (line.trimStart().startsWith("#") || !line.trim()) continue;
+    if (line.trim() === "categories:") {
+      inCategories = true;
+      continue;
+    }
+    if (!inCategories) continue;
+
+    const entry = line.match(/^(\s*)-\s+(.+?)\s*$/);
+    if (!entry) continue;
+
+    const indent = entry[1].length;
+    const value = entry[2];
+    if (rootIndent === undefined) rootIndent = indent;
+
+    if (indent === rootIndent) {
+      const parent = value.match(/^([A-Za-z][A-Za-z0-9_-]*):$/);
+      current = parent
+        ? { key: parent[1], children: [] }
+        : { key: parseYamlValue(value) };
+      categories.push(current);
+      continue;
+    }
+
+    if (indent > rootIndent && current?.children) {
+      current.children.push(parseYamlValue(value));
+    }
+  }
+
+  return categories.map((category) =>
+    category.children?.length ? category : { key: category.key }
+  );
+}
+
+async function readCategories() {
+  const categories = parseCategoryConfig(await readFile(CATEGORY_CONFIG, "utf8"));
+  if (!categories.length || categories.some((category) => !category.key)) {
+    throw new Error("content/categories.yaml must define at least one category key.");
+  }
+  return categories;
+}
+
+async function typographyImagePath(image) {
+  if (/^(?:\/|https?:\/\/)/.test(image)) return image;
+
+  const directory = new URL("../public/img/typography/", import.meta.url);
+  const files = await readdir(directory);
+  const filename = files.find((file) => file.normalize("NFC") === image.normalize("NFC")) ?? image;
+  return `/img/typography/${filename}`;
+}
+
+async function readTypographyItems() {
+  let manifest;
+  try {
+    manifest = await readFile(TYPOGRAPHY_MANIFEST, "utf8");
+  } catch (error) {
+    if (error?.code === "ENOENT") return { items: [], pages: [] };
+    throw error;
+  }
+
+  const entries = parseYamlManifest(manifest);
+  const items = [];
+  const pages = [];
+
+  for (const entry of entries) {
+    if (!entry.image) {
+      throw new Error("Each entry in content/typography.yaml needs image.");
+    }
+
+    const entryId = pageId(entry.id, `Typography entry ${entry.title ?? entry.image}`);
+    const title = entry.title || entryId;
+    const publishedAt = normalizeDate(entry.date);
+    const slug = `typography/${entryId}`;
+    const url = pageUrlForSlug(slug);
+    const tags = ["typography"];
+    const image = await typographyImagePath(entry.image);
+
+    items.push({
+      id: entryId,
+      title,
+      url,
+      publishedAt,
+      summary: entry.summary || "",
+      image,
+      source: "typography",
+      type: "image",
+      tags,
+      local: true
+    });
+    pages.push({
+      id: entryId,
+      slug,
+      title,
+      body: entry.summary || "",
+      image,
+      imageAlt: entry.alt || "",
+      source: "typography",
+      publishedAt,
+      tags,
+      file: `content/typography.yaml#${entryId}`
+    });
+  }
+
+  return { items, pages };
+}
+
+async function readMusicItems() {
+  const manifest = await readFile(MUSIC_MANIFEST, "utf8");
+  const entries = parseYamlManifest(manifest);
+  const configuredAlbums = parseYamlManifest(manifest, "albums").map((entry) => {
+    if (!entry.path) throw new Error("Each music album needs a path.");
+    const path = albumSlug(entry.path);
+    return {
+      path,
+      title: entry.title || entry.path,
+      image: entry.image || "",
+      link: entry.link || entry.url || "",
+      summary: entry.summary || "",
+      publishedAt: normalizeDate(entry.date),
+      sc: entry.sc || ""
+    };
+  });
+  const albumByPath = new Map(configuredAlbums.map((album) => [album.path, album]));
+  const albumByTitle = new Map(configuredAlbums.map((album) => [album.title, album]));
+  const items = entries.map((entry) => {
+    if (!entry.title || !entry.url || !entry.id) {
+      throw new Error("Each entry in content/music.yaml needs id, title and url.");
+    }
+    const id = pageId(entry.id, `Music entry ${entry.title}`);
+    const configuredAlbum = entry.album
+      ? albumByPath.get(albumSlug(entry.album)) || albumByTitle.get(entry.album)
+      : undefined;
+    const album = configuredAlbum?.path || (entry.album ? albumSlug(entry.album) : "");
+    const albumMeta = configuredAlbum || albumByPath.get(album);
+
+    return {
+      id,
+      title: entry.title,
+      url: `/music/${album ? encodeURIComponent(album) + "/" : ""}${id}/`,
+      sourceUrl: entry.url,
+      publishedAt: normalizeDate(entry.date),
+      summary: entry.summary || "",
+      image: entry.image || "",
+      source: "SoundCloud",
+      type: "music",
+      tags: ["music"],
+      album,
+      albumTitle: albumMeta?.title || entry.album || "",
+      albumImage: albumMeta?.image || "",
+      albumLink: albumMeta?.link || "",
+      albumSummary: albumMeta?.summary || "",
+      local: true
+    };
+  });
+  const albums = [...configuredAlbums];
+  for (const item of items) {
+    if (item.album && !albumByPath.has(item.album)) {
+      albums.push({ path: item.album, title: item.albumTitle, image: "", link: "", summary: "", publishedAt: null, sc: "" });
+    }
+  }
+  return { entries, items, albums };
+}
+
+async function readVideoItems() {
+  const entries = parseYamlManifest(await readFile(VIDEO_MANIFEST, "utf8"));
+  const items = entries.map((entry) => {
+    if (!entry.title || !entry.url || !entry.id) {
+      throw new Error("Each entry in content/video.yaml needs id, title and url.");
+    }
+    const id = pageId(entry.id, `Video entry ${entry.title}`);
+    const tags = normalizeTags(Array.isArray(entry.tags)
+      ? entry.tags
+      : entry.tags ? String(entry.tags).split(",").map((tag) => tag.trim()) : ["video"]);
+    return {
+      id,
+      title: entry.title,
+      url: `/video/${id}/`,
+      sourceUrl: entry.url,
+      publishedAt: normalizeDate(entry.date),
+      summary: entry.summary || "",
+      image: entry.image || "",
+      source: "YouTube",
+      type: "video",
+      tags,
+      local: true
+    };
+  });
+  return { entries, items };
+}
+
+function yamlString(value) {
+  return JSON.stringify(value);
+}
+
+async function syncManifest(manifestUrl, entries, rssItems, label) {
+  const knownUrls = new Set(entries.map((entry) => entry.url));
+  const missing = rssItems.filter((item) => !knownUrls.has(item.url));
+  if (!missing.length) return;
+
+  const additions = missing.map((item) => {
+    const lines = [
+      `  - title: ${yamlString(item.title)}`,
+      `    id: ${randomUUID()}`,
+      `    date: ${item.publishedAt?.slice(0, 10) ?? ""}`,
+      `    url: ${yamlString(item.url)}`
+    ];
+    if (item.image) lines.push(`    image: ${yamlString(item.image)}`);
+    if (item.summary) lines.push(`    summary: ${yamlString(item.summary)}`);
+    return lines.join("\n");
+  });
+
+  await appendFile(manifestUrl, `\n${additions.join("\n")}\n`);
+  console.log(`Added ${missing.length} ${label} item(s).`);
+}
+
+function parseFeed(xml, feed) {
+  return blocksFor(xml).slice(0, MAX_ITEMS_PER_FEED).map((block) => {
+    const link = firstTag(block, ["link"]) || attrTag(block, "link", "href");
+    const description = firstTag(block, ["description", "summary", "content:encoded", "content"]);
+    return {
+      title: stripHtml(firstTag(block, ["title"])) || "Untitled",
+      url: link,
+      publishedAt: normalizeDate(firstTag(block, ["pubDate", "published", "updated", "dc:date"])),
+      summary: stripHtml(description).slice(0, 220),
+      image: firstImage(block),
+      source: feed.title,
+      type: feed.type,
+      tags: normalizeTags(feed.tags ?? [])
+    };
+  }).filter((item) => item.url);
+}
+
+async function resolveFeedUrl(feed) {
+  const url = new URL(feed.url);
+  const channelId = url.searchParams.get("channel_id");
+
+  if (url.hostname.includes("youtube.com") && channelId?.startsWith("@")) {
+    const channelPage = await fetch(`https://www.youtube.com/${channelId}`, {
+      headers: {
+        "user-agent": "tetta-pdnt.github.io feed builder"
+      }
+    });
+
+    if (!channelPage.ok) {
+      throw new Error(`${feed.title}: could not resolve YouTube handle ${channelId}`);
+    }
+
+    const html = await channelPage.text();
+    const resolved = html.match(/"externalId"\s*:\s*"(UC[^"]+)"/)?.[1]
+      ?? html.match(/"browseId"\s*:\s*"(UC[^"]+)"/)?.[1]
+      ?? html.match(/"channelId"\s*:\s*"(UC[^"]+)"/)?.[1]
+      ?? html.match(/<meta itemprop="channelId" content="(UC[^"]+)">/)?.[1];
+
+    if (!resolved) {
+      throw new Error(`${feed.title}: YouTube channel ID not found for ${channelId}`);
+    }
+
+    url.searchParams.set("channel_id", resolved);
+    return url.toString();
+  }
+
+  return feed.url;
+}
+
+async function readTextFile(fileUrl) {
+  const buffer = await readFile(fileUrl);
+  if (buffer[0] === 0xff && buffer[1] === 0xfe) return buffer.subarray(2).toString("utf16le");
+  if (buffer[0] === 0xfe && buffer[1] === 0xff) {
+    const swapped = Buffer.alloc(buffer.length - 2);
+    for (let index = 2; index + 1 < buffer.length; index += 2) {
+      swapped[index - 2] = buffer[index + 1];
+      swapped[index - 1] = buffer[index];
+    }
+    return swapped.toString("utf16le");
+  }
+  return buffer.toString("utf8");
+}
+
+function parseFrontmatter(text) {
+  const match = text.match(/^---\n([\s\S]*?)\n---\n?/);
+  if (!match) return { data: {}, body: text };
+
+  const data = {};
+  const lines = match[1].split(/\r?\n/);
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+    const pair = line.match(/^([A-Za-z0-9_-]+):\s*(.*)$/);
+    if (!pair) continue;
+    const value = pair[2].trim();
+    if (!value) {
+      const values = [];
+      while (lines[index + 1]?.match(/^\s+-\s+/)) {
+        index += 1;
+        values.push(lines[index].replace(/^\s+-\s+/, "").trim().replace(/^[\'"]|[\'"]$/g, ""));
+      }
+      data[pair[1]] = values;
+    } else {
+      data[pair[1]] = value.replace(/^[\'"]|[\'"]$/g, "");
+    }
+  }
+
+  return { data, body: text.slice(match[0].length) };
+}
+
+function titleFromContent(body, filePath) {
+  return body.match(/^#\s+(.+)$/m)?.[1]?.trim()
+    || path.basename(filePath, path.extname(filePath)).replace(/[-_]+/g, " ");
+}
+
+function dateFromPath(filePath) {
+  return filePath.match(/(\d{4}-\d{2}-\d{2})/)?.[1] ?? null;
+}
+
+function trimOuterBlankLines(body) {
+  const lines = body.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
+  while (lines.length && !lines[0].trim()) lines.shift();
+  while (lines.length && !lines[lines.length - 1].trim()) lines.pop();
+  return lines.join("\n");
+}
+
+function indentFirstJapaneseLine(body) {
+  const lines = body.split(/\r?\n/);
+  const index = lines.findIndex((line) => line.trim());
+  if (index === -1) return body;
+  if (!/^[　\s]/.test(lines[index]) && !/^(#{1,6}\s|[-*+]\s|\d+\.\s|>|`{3}|---)/.test(lines[index])) {
+    lines[index] = "　" + lines[index];
+  }
+  return lines.join("\n");
+}
+function summaryFromMarkdown(body) {
+  return stripHtml(body
+    .replace(/^#.*$/gm, "")
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, "")
+    .replace(/\[[^\]]+\]\(([^)]+)\)/g, "$1")
+    .replace(/```[\s\S]*?```/g, "")
+    .trim()).slice(0, 220);
+}
+
+function imageFromMarkdown(body) {
+  return body.match(/!\[[^\]]*\]\(([^)\s]+)(?:\s+[\'"][^\'"]*[\'"])?\)/)?.[1] ?? "";
+}
+
+async function walkFiles(rootUrl, relativeDir = "") {
+  let entries = [];
+  try {
+    entries = await readdir(new URL(relativeDir ? `${relativeDir}/` : "./", rootUrl), { withFileTypes: true });
+  } catch (error) {
+    if (error?.code === "ENOENT") return [];
+    throw error;
+  }
+
+  const files = [];
+  for (const entry of entries) {
+    if (entry.name.startsWith(".")) continue;
+    const relativePath = path.posix.join(relativeDir, entry.name);
+    if (entry.isDirectory()) {
+      files.push(...await walkFiles(rootUrl, relativePath));
+    } else {
+      files.push(relativePath);
+    }
+  }
+  return files;
+}
+
+function slugPart(value) {
+  return value
+    .replace(/\.[^.]+$/, "")
+    .trim()
+    .replace(/[\\/]+/g, "-")
+    .replace(/\s+/g, "-")
+    .replace(/[?#%]+/g, "-");
+}
+
+function albumSlug(value) {
+  return slugPart(value)
+    .normalize("NFKD")
+    .replace(/[^A-Za-z0-9_-]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "")
+    .toLowerCase();
+}
+
+function pageUrlForSlug(slug) {
+  return "/" + slug.split("/").map(encodeURIComponent).join("/") + "/";
+}
+
+function externalPageSlug(source, tags, id) {
+  const writingCategory = ["prose", "novel", "vignette", "article", "poem"].find((tag) => tags.includes(tag));
+  if (writingCategory) return `writing/${writingCategory}/${id}`;
+  if (tags.includes("typography")) return `typography/${id}`;
+  return `items/${slugPart(source)}/${id}`;
+}
+
+async function readExternalConfig() {
+  try {
+    return JSON.parse(await readFile(EXTERNAL_CONFIG, "utf8"));
+  } catch (error) {
+    if (error?.code === "ENOENT") {
+      return {
+        path: "external",
+        type: "writing",
+        tags: ["novel"],
+        extensions: [".md", ".mdx", ".txt", ".phile"]
+      };
+    }
+    throw error;
+  }
+}
+
+async function externalRoots(config) {
+  const externalRoot = new URL("../" + (config.path ?? "external") + "/", import.meta.url);
+  let entries = [];
+  try {
+    entries = await readdir(externalRoot, { withFileTypes: true });
+  } catch (error) {
+    if (error?.code === "ENOENT") return [];
+    throw error;
+  }
+
+  return entries
+    .filter((entry) => entry.isDirectory() && !entry.name.startsWith("."))
+    .map((entry) => ({ name: entry.name, rootUrl: new URL(entry.name + "/", externalRoot) }));
+}
+
+async function readExternalItems() {
+  const config = await readExternalConfig();
+  const extensions = new Set(config.extensions ?? [".md", ".mdx", ".txt", ".phile"]);
+  const excluded = new Set(config.exclude ?? []);
+  const items = [];
+  const pages = [];
+
+  for (const root of await externalRoots(config)) {
+    const rootConfig = config.sources?.[root.name] ?? {};
+    const included = rootConfig.include ? new Set(rootConfig.include) : null;
+    const files = (await walkFiles(root.rootUrl))
+      .filter((file) => extensions.has(path.extname(file).toLowerCase()))
+      .filter((file) => !excluded.has(path.basename(file)))
+      .filter((file) => !included || included.has(file));
+
+    for (const file of files) {
+      const text = await readTextFile(new URL(file, root.rootUrl));
+      const { data, body } = parseFrontmatter(text);
+      const title = data.title || titleFromContent(body, file);
+      const publishedAt = normalizeDate(data.publishedAt || data.date || dateFromPath(file));
+      const tags = normalizeTags(data.tags
+        ? (Array.isArray(data.tags) ? data.tags : data.tags.split(",")).map((tag) => tag.trim()).filter(Boolean)
+        : (rootConfig.tags ?? config.tags ?? []));
+      const source = data.source || rootConfig.source || root.name;
+      const id = pageId(data.id, `External entry ${root.name}/${file}`);
+      const slug = externalPageSlug(source, tags, id);
+      const url = pageUrlForSlug(slug);
+
+      items.push({
+        id,
+        title,
+        url,
+        publishedAt,
+        summary: data.summary || summaryFromMarkdown(body),
+        image: data.image || imageFromMarkdown(body),
+        source,
+        type: data.type || rootConfig.type || config.type || "writing",
+        tags,
+        local: true
+      });
+
+      pages.push({
+        id,
+        slug,
+        title,
+        body: tags.includes("novel") ? indentFirstJapaneseLine(trimOuterBlankLines(body)) : trimOuterBlankLines(body),
+        image: data.image || imageFromMarkdown(body),
+        imageAlt: data.imageAlt || "",
+        source,
+        publishedAt,
+        tags,
+        file: root.name + "/" + file
+      });
+    }
+  }
+
+  return { items, pages };
+}
+
+async function readManualItems() {
+  try {
+    const payload = JSON.parse(await readFile(MANUAL_ITEMS, "utf8"));
+    return (payload.items ?? []).map((item) => ({
+      id: pageId(item.id, `Manual entry ${item.title ?? item.url}`),
+      title: item.title,
+      url: item.url,
+      publishedAt: normalizeDate(item.publishedAt),
+      summary: item.summary ?? "",
+      image: item.image ?? "",
+      source: item.source ?? "manual",
+      type: item.type ?? "link",
+      tags: normalizeTags(item.tags ?? [])
+    })).filter((item) => item.title && item.url);
+  } catch (error) {
+    if (error?.code === "ENOENT") return [];
+    throw error;
+  }
+}
+
+async function fetchFeed(feed) {
+  if (/YOUR_(NOTE_ID|CHANNEL_ID|SOUNDCLOUD_USER_ID)/.test(feed.url)) return [];
+
+  const url = await resolveFeedUrl(feed);
+  const response = await fetch(url, {
+    headers: {
+      "user-agent": "tetta-pdnt.github.io feed builder"
+    }
+  });
+
+  if (!response.ok) {
+    throw new Error(`${feed.title}: ${response.status} ${response.statusText}`);
+  }
+
+  return parseFeed(await response.text(), feed);
+}
+
+const config = JSON.parse(await readFile(FEED_CONFIG, "utf8"));
+const [manualItems, externalData, typographyData, initialMusicData, initialVideoData, categories, settled] = await Promise.all([
+  readManualItems(),
+  readExternalItems(),
+  readTypographyItems(),
+  readMusicItems(),
+  readVideoItems(),
+  readCategories(),
+  Promise.allSettled(config.feeds.map(fetchFeed))
+]);
+const failures = settled.filter((result) => result.status === "rejected");
+
+for (const failure of failures) {
+  console.warn(failure.reason?.message ?? failure.reason);
+}
+
+const fetchedItems = settled
+  .filter((result) => result.status === "fulfilled")
+  .flatMap((result) => result.value);
+
+const fetchedMusicItems = fetchedItems.filter((item) => item.source === "SoundCloud");
+const fetchedVideoItems = fetchedItems.filter((item) => item.source === "YouTube");
+await syncManifest(MUSIC_MANIFEST, initialMusicData.entries, fetchedMusicItems, "SoundCloud");
+await syncManifest(VIDEO_MANIFEST, initialVideoData.entries, fetchedVideoItems, "YouTube");
+const musicData = fetchedMusicItems.length ? await readMusicItems() : initialMusicData;
+const videoData = fetchedVideoItems.length ? await readVideoItems() : initialVideoData;
+
+let fallbackItems = [];
+if (!fetchedItems.length && failures.length) {
+  try {
+    const currentFeedSources = new Set(config.feeds.map((feed) => feed.title));
+    fallbackItems = (JSON.parse(await readFile(OUT_FILE, "utf8")).items ?? [])
+      .filter((item) => item.local !== true && currentFeedSources.has(item.source))
+      .map((item) => ({ ...item, tags: normalizeTags(item.tags ?? []) }));
+    console.warn(`Keeping ${fallbackItems.length} existing items because all RSS fetches failed.`);
+  } catch {
+    fallbackItems = [];
+  }
+}
+
+const seen = new Set();
+const items = [
+  ...manualItems,
+  ...musicData.items,
+  ...videoData.items,
+  ...externalData.items,
+  ...typographyData.items,
+  ...(fetchedItems.length ? fetchedItems : fallbackItems).filter((item) => item.source !== "SoundCloud" && item.source !== "YouTube")
+]
+  .filter((item) => {
+    if (!item.id) throw new Error(`Every item needs an id: ${item.title}`);
+    const key = item.id;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  })
+  .sort((a, b) => {
+    const left = a.publishedAt ? Date.parse(a.publishedAt) : 0;
+    const right = b.publishedAt ? Date.parse(b.publishedAt) : 0;
+    return right - left;
+  });
+
+await mkdir(new URL("../public/data", import.meta.url), { recursive: true });
+await writeFile(OUT_FILE, `${JSON.stringify({ updatedAt: new Date().toISOString(), items, musicAlbums: musicData.albums }, null, 2)}\n`);
+await writeFile(PAGES_OUT_FILE, `${JSON.stringify({ updatedAt: new Date().toISOString(), pages: [...externalData.pages, ...typographyData.pages] }, null, 2)}\n`);
+await writeFile(CATEGORIES_OUT_FILE, `${JSON.stringify({ categories }, null, 2)}\n`);
+
+console.log(`Wrote ${items.length} feed items.`);

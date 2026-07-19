@@ -1,0 +1,67 @@
+---
+import "../../styles/global.css";
+import payload from "../../../public/data/pages.json";
+import Breadcrumbs from "../../components/Breadcrumbs.astro";
+
+export function getStaticPaths() {
+  return [];
+}
+
+const { page } = Astro.props;
+const published = page.publishedAt ? new Date(page.publishedAt).toLocaleDateString("ja-JP") : "undated";
+const displayBody = page.body.replace(/^　/gm, "\u00a0\u00a0");
+const hasBody = displayBody.trim().length > 0;
+const writingCategory = ["prose", "novel", "vignette", "article", "poem"].find((tag) => page.tags.includes(tag));
+const category = writingCategory ? "writing" : page.tags.includes("typography") ? "typography" : page.tags[0];
+const breadcrumbs = writingCategory
+  ? [{ label: "writing", href: "/writing/" }, { label: writingCategory, href: `/writing/${writingCategory}/` }]
+  : category ? [{ label: category, href: `/${category}/` }] : [];
+---
+
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{page.title} / pdnt-work</title>
+  </head>
+  <body>
+    <main class="reader-shell" data-source={page.source}>
+      <Breadcrumbs items={breadcrumbs} />
+      <article class="reader-article">
+        <header class="reader-header">
+          <p class="section-title">~ {page.source} / {published}</p>
+          <h1>{page.title}</h1>
+          <p class="reader-file">{page.file}</p>
+          <div class="tag-row">
+            {page.tags.map((tag) => <span class="tag" data-tag={tag}>{tag}</span>)}
+          </div>
+        </header>
+        {page.image && page.source === "typography" ? (
+          <>
+            <button class="reader-image-trigger" type="button" aria-label="画像を拡大表示">
+              <img class="reader-cover" src={page.image} alt={page.imageAlt ?? ""} />
+            </button>
+            <dialog class="image-lightbox" aria-label={`${page.title} を拡大表示`}>
+              <button class="image-lightbox-close" type="button" aria-label="閉じる">×</button>
+              <img src={page.image} alt={page.imageAlt ?? ""} />
+            </dialog>
+          </>
+        ) : page.image && <img class="reader-cover" src={page.image} alt={page.imageAlt ?? ""} />}
+        {hasBody && <pre class="reader-body">{displayBody}</pre>}
+      </article>
+    </main>
+    {page.source === "typography" && (
+      <script>
+        const trigger = document.querySelector(".reader-image-trigger");
+        const dialog = document.querySelector(".image-lightbox");
+        const close = document.querySelector(".image-lightbox-close");
+
+        trigger?.addEventListener("click", () => dialog?.showModal());
+        close?.addEventListener("click", () => dialog?.close());
+        dialog?.addEventListener("click", (event) => {
+          if (event.target === dialog) dialog.close();
+        });
+      </script>
+    )}
+  </body>
+</html>
