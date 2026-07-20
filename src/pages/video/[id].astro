@@ -1,12 +1,11 @@
 ---
 import "../../styles/global.css";
-import { readFile } from "node:fs/promises";
-import path from "node:path";
+import { loadSiteData } from "../../lib/site-data.js";
 import Breadcrumbs from "../../components/Breadcrumbs.astro";
 
 export async function getStaticPaths() {
-  const payload = JSON.parse(await readFile(path.join(process.cwd(), "public/data/items.json"), "utf8"));
-  return (payload.items ?? [])
+  const { items } = await loadSiteData();
+  return items
     .filter((item) => item.source === "YouTube")
     .map((item) => ({ params: { id: item.id }, props: { item } }));
 }

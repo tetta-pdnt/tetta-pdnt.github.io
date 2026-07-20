@@ -1,11 +1,12 @@
 ---
 import "../styles/global.css";
-import payload from "../../public/data/pages.json";
+import { loadSiteData } from "../lib/site-data.js";
 import Breadcrumbs from "../components/Breadcrumbs.astro";
 import { renderMarkdown } from "../lib/markdown.js";
 
-export function getStaticPaths() {
-  return (payload.pages ?? []).map((page) => ({ params: { slug: page.slug }, props: { page } }));
+export async function getStaticPaths() {
+  const { pages } = await loadSiteData();
+  return pages.map((page) => ({ params: { slug: page.slug }, props: { page } }));
 }
 
 const { page } = Astro.props;

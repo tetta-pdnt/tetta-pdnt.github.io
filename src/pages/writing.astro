@@ -1,13 +1,11 @@
 ---
 import "../styles/global.css";
-import { readFile } from "node:fs/promises";
-import path from "node:path";
-import categoryPayload from "../../public/data/categories.json";
+import { loadSiteData } from "../lib/site-data.js";
 import Breadcrumbs from "../components/Breadcrumbs.astro";
 
-const writingTags = categoryPayload.categories.find((category) => category.key === "writing")?.children ?? [];
-const payload = JSON.parse(await readFile(path.join(process.cwd(), "public/data/items.json"), "utf8"));
-const items = (payload.items ?? []).filter((item) => writingTags.some((tag) => item.tags?.includes(tag)));
+const { categories, items: allItems } = await loadSiteData();
+const writingTags = categories.find((category) => category.key === "writing")?.children ?? [];
+const items = allItems.filter((item) => writingTags.some((tag) => item.tags?.includes(tag)));
 
 function itemHref(item) {
   return item.url;

@@ -1,20 +1,19 @@
 ---
 import "../../styles/global.css";
-import { readFile } from "node:fs/promises";
-import path from "node:path";
-import categoryPayload from "../../../public/data/categories.json";
+import { loadSiteData } from "../../lib/site-data.js";
 import Breadcrumbs from "../../components/Breadcrumbs.astro";
 
-export function getStaticPaths() {
-  const categories = categoryPayload.categories
+export async function getStaticPaths() {
+  const { categories: categoryData } = await loadSiteData();
+  const categories = categoryData
     .find((category) => category.key === "writing")?.children
     .map((key) => ({ key })) ?? [];
   return categories.map((category) => ({ params: { category: category.key }, props: { category } }));
 }
 
 const { category } = Astro.props;
-const payload = JSON.parse(await readFile(path.join(process.cwd(), "public/data/items.json"), "utf8"));
-const items = (payload.items ?? []).filter((item) => item.tags?.includes(category.key));
+const { items: allItems } = await loadSiteData();
+const items = allItems.filter((item) => item.tags?.includes(category.key));
 ---
 
 <html lang="ja">

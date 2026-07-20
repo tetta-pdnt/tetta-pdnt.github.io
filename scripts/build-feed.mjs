@@ -1,18 +1,18 @@
-import { appendFile, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { appendFile, readdir, readFile, writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import path from "node:path";
 
-const FEED_CONFIG = new URL("../feeds.json", import.meta.url);
-const OUT_FILE = new URL("../public/data/items.json", import.meta.url);
-const PAGES_OUT_FILE = new URL("../public/data/pages.json", import.meta.url);
-const MANUAL_ITEMS = new URL("../manual-items.json", import.meta.url);
-const EXTERNAL_CONFIG = new URL("../external.config.json", import.meta.url);
-const TYPOGRAPHY_MANIFEST = new URL("../content/typography.yaml", import.meta.url);
-const MUSIC_MANIFEST = new URL("../content/music.yaml", import.meta.url);
-const VIDEO_MANIFEST = new URL("../content/video.yaml", import.meta.url);
-const CATEGORY_CONFIG = new URL("../content/categories.yaml", import.meta.url);
-const CATEGORIES_OUT_FILE = new URL("../public/data/categories.json", import.meta.url);
+const PROJECT_ROOT = pathToFileURL(`${path.resolve(process.cwd())}${path.sep}`);
+const FEED_CONFIG = new URL("feeds.json", PROJECT_ROOT);
+const MANUAL_ITEMS = new URL("manual-items.json", PROJECT_ROOT);
+const EXTERNAL_CONFIG = new URL("external.config.json", PROJECT_ROOT);
+const TYPOGRAPHY_MANIFEST = new URL("content/typography.yaml", PROJECT_ROOT);
+const MUSIC_MANIFEST = new URL("content/music.yaml", PROJECT_ROOT);
+const VIDEO_MANIFEST = new URL("content/video.yaml", PROJECT_ROOT);
+const CATEGORY_CONFIG = new URL("content/categories.yaml", PROJECT_ROOT);
 const MAX_ITEMS_PER_FEED = 12;
+const IGNORED_CONTENT_DIRECTORIES = new Set(["node_modules"]);
 const assignMissingIds = process.argv.includes("--assign-missing-ids");
 
 const entityMap = {
@@ -248,7 +248,7 @@ async function readCategories() {
 async function typographyImagePath(image) {
   if (/^(?:\/|https?:\/\/)/.test(image)) return image;
 
-  const directory = new URL("../public/img/typography/", import.meta.url);
+  const directory = new URL("public/img/typography/", PROJECT_ROOT);
   const files = await readdir(directory);
   const filename = files.find((file) => file.normalize("NFC") === image.normalize("NFC")) ?? image;
   return `/img/typography/${filename}`;
@@ -569,6 +569,7 @@ async function walkFiles(rootUrl, relativeDir = "") {
   const files = [];
   for (const entry of entries) {
     if (entry.name.startsWith(".")) continue;
+    if (entry.isDirectory() && IGNORED_CONTENT_DIRECTORIES.has(entry.name)) continue;
     const relativePath = path.posix.join(relativeDir, entry.name);
     if (entry.isDirectory()) {
       files.push(...await walkFiles(rootUrl, relativePath));
@@ -624,7 +625,7 @@ async function readExternalConfig() {
 }
 
 async function externalRoots(config) {
-  const externalRoot = new URL("../" + (config.path ?? "external") + "/", import.meta.url);
+  const externalRoot = new URL((config.path ?? "external") + "/", PROJECT_ROOT);
   let entries = [];
   try {
     entries = await readdir(externalRoot, { withFileTypes: true });
@@ -806,71 +807,74 @@ if (assignMissingIds) {
   ]);
 }
 
-const config = JSON.parse(await readFile(FEED_CONFIG, "utf8"));
-const [manualItems, externalData, typographyData, initialMusicData, initialVideoData, categories, settled] = await Promise.all([
-  readManualItems(),
-  readExternalItems(),
-  readTypographyItems(),
-  readMusicItems(),
-  readVideoItems(),
-  readCategories(),
-  Promise.allSettled(config.feeds.map(fetchFeed))
-]);
-const failures = settled.filter((result) => result.status === "rejected");
+let cachedSiteData;
 
-for (const failure of failures) {
-  console.warn(failure.reason?.message ?? failure.reason);
-}
+export async function loadSiteData({ syncRss = false } = {}) {
+  if (!syncRss && cachedSiteData) return cachedSiteData;
 
-const fetchedItems = settled
-  .filter((result) => result.status === "fulfilled")
-  .flatMap((result) => result.value);
+  const [manualItems, externalData, typographyData, initialMusicData, initialVideoData, categories] = await Promise.all([
+    readManualItems(),
+    readExternalItems(),
+    readTypographyItems(),
+    readMusicItems(),
+    readVideoItems(),
+    readCategories()
+  ]);
 
-const fetchedMusicItems = fetchedItems.filter((item) => item.source === "SoundCloud");
-const fetchedVideoItems = fetchedItems.filter((item) => item.source === "YouTube");
-await syncManifest(MUSIC_MANIFEST, initialMusicData.entries, fetchedMusicItems, "SoundCloud");
-await syncManifest(VIDEO_MANIFEST, initialVideoData.entries, fetchedVideoItems, "YouTube");
-const musicData = fetchedMusicItems.length ? await readMusicItems() : initialMusicData;
-const videoData = fetchedVideoItems.length ? await readVideoItems() : initialVideoData;
+  let musicData = initialMusicData;
+  let videoData = initialVideoData;
+  let otherFeedItems = [];
 
-let fallbackItems = [];
-if (!fetchedItems.length && failures.length) {
-  try {
-    const currentFeedSources = new Set(config.feeds.map((feed) => feed.title));
-    fallbackItems = (JSON.parse(await readFile(OUT_FILE, "utf8")).items ?? [])
-      .filter((item) => item.local !== true && currentFeedSources.has(item.source))
-      .map((item) => ({ ...item, tags: normalizeTags(item.tags ?? []) }));
-    console.warn(`Keeping ${fallbackItems.length} existing items because all RSS fetches failed.`);
-  } catch {
-    fallbackItems = [];
+  if (syncRss) {
+    const config = JSON.parse(await readFile(FEED_CONFIG, "utf8"));
+    const settled = await Promise.allSettled(config.feeds.map(fetchFeed));
+    const failures = settled.filter((result) => result.status === "rejected");
+    for (const failure of failures) console.warn(failure.reason?.message ?? failure.reason);
+
+    const fetchedItems = settled
+      .filter((result) => result.status === "fulfilled")
+      .flatMap((result) => result.value);
+    const fetchedMusicItems = fetchedItems.filter((item) => item.source === "SoundCloud");
+    const fetchedVideoItems = fetchedItems.filter((item) => item.source === "YouTube");
+    otherFeedItems = fetchedItems.filter((item) => item.source !== "SoundCloud" && item.source !== "YouTube");
+
+    await syncManifest(MUSIC_MANIFEST, initialMusicData.entries, fetchedMusicItems, "SoundCloud");
+    await syncManifest(VIDEO_MANIFEST, initialVideoData.entries, fetchedVideoItems, "YouTube");
+    if (fetchedMusicItems.length) musicData = await readMusicItems();
+    if (fetchedVideoItems.length) videoData = await readVideoItems();
   }
+
+  const seen = new Set();
+  const items = [
+    ...manualItems,
+    ...musicData.items,
+    ...videoData.items,
+    ...externalData.items,
+    ...typographyData.items,
+    ...otherFeedItems
+  ]
+    .filter((item) => {
+      if (!item.id) throw new Error(`Every item needs an id: ${item.title}`);
+      if (seen.has(item.id)) return false;
+      seen.add(item.id);
+      return true;
+    })
+    .sort((a, b) => (Date.parse(b.publishedAt) || 0) - (Date.parse(a.publishedAt) || 0));
+
+  const updatedAt = items.find((item) => item.publishedAt)?.publishedAt ?? null;
+  const data = {
+    updatedAt,
+    items,
+    musicAlbums: musicData.albums,
+    pages: [...externalData.pages, ...typographyData.pages],
+    categories
+  };
+  if (!syncRss) cachedSiteData = data;
+  return data;
 }
 
-const seen = new Set();
-const items = [
-  ...manualItems,
-  ...musicData.items,
-  ...videoData.items,
-  ...externalData.items,
-  ...typographyData.items,
-  ...(fetchedItems.length ? fetchedItems : fallbackItems).filter((item) => item.source !== "SoundCloud" && item.source !== "YouTube")
-]
-  .filter((item) => {
-    if (!item.id) throw new Error(`Every item needs an id: ${item.title}`);
-    const key = item.id;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  })
-  .sort((a, b) => {
-    const left = a.publishedAt ? Date.parse(a.publishedAt) : 0;
-    const right = b.publishedAt ? Date.parse(b.publishedAt) : 0;
-    return right - left;
-  });
-
-await mkdir(new URL("../public/data", import.meta.url), { recursive: true });
-await writeFile(OUT_FILE, `${JSON.stringify({ updatedAt: new Date().toISOString(), items, musicAlbums: musicData.albums }, null, 2)}\n`);
-await writeFile(PAGES_OUT_FILE, `${JSON.stringify({ updatedAt: new Date().toISOString(), pages: [...externalData.pages, ...typographyData.pages] }, null, 2)}\n`);
-await writeFile(CATEGORIES_OUT_FILE, `${JSON.stringify({ categories }, null, 2)}\n`);
-
-console.log(`Wrote ${items.length} feed items.`);
+const isMain = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+if (isMain) {
+  const data = await loadSiteData({ syncRss: process.argv.includes("--sync-rss") });
+  console.log(`Loaded ${data.items.length} items.`);
+}

@@ -1,12 +1,11 @@
 ---
 import "../styles/global.css";
-import { readFile } from "node:fs/promises";
-import path from "node:path";
+import { loadSiteData } from "../lib/site-data.js";
 import Breadcrumbs from "../components/Breadcrumbs.astro";
 
-const payload = JSON.parse(await readFile(path.join(process.cwd(), "public/data/items.json"), "utf8"));
-const tracks = (payload.items ?? []).filter((item) => item.source === "SoundCloud");
-const albumCards = (payload.musicAlbums ?? [])
+const { items, musicAlbums } = await loadSiteData();
+const tracks = items.filter((item) => item.source === "SoundCloud");
+const albumCards = musicAlbums
   .filter((album) => album.image)
   .map((album) => ({
     kind: "album",

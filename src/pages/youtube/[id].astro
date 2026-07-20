@@ -1,7 +1,5 @@
 ---
 import "../../styles/global.css";
-import { readFile } from "node:fs/promises";
-import path from "node:path";
 
 export async function getStaticPaths() {
   return [];
@@ -11,10 +9,6 @@ export async function getStaticPaths() {
     if (parsed.pathname.startsWith("/shorts/")) return parsed.pathname.split("/")[2];
     return parsed.searchParams.get("v") || parsed.pathname.split("/").filter(Boolean).at(-1);
   };
-  const payload = JSON.parse(await readFile(path.join(process.cwd(), "public/data/items.json"), "utf8"));
-  return (payload.items ?? [])
-    .filter((item) => item.source === "YouTube")
-    .map((item) => ({ params: { id: youtubeId(item.url) }, props: { item, id: youtubeId(item.url) } }));
 }
 
 const { item, id } = Astro.props;

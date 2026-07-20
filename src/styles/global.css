@@ -20,10 +20,13 @@
 }
 
 html {
+  min-height: 100%;
   background: var(--bg);
 }
 
 body {
+  min-height: 100vh;
+  min-height: 100dvh;
   max-width: 112ch;
   margin: 0 auto;
   padding: 2rem 1rem 5rem;
@@ -34,16 +37,6 @@ body {
   line-height: 1.5;
   letter-spacing: 0;
   text-rendering: optimizeSpeed;
-}
-
-body::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  z-index: -1;
-  background:
-    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.025) 0 1px, transparent 1px 3px),
-    radial-gradient(circle at 50% 0, rgba(136, 187, 186, 0.08), transparent 42rem);
 }
 
 a {
@@ -816,6 +809,7 @@ time {
 }
 
 .album-overview .collection-card {
+  display: grid;
   grid-template-columns: minmax(0, 18rem) minmax(0, 1fr);
   grid-template-rows: 1fr;
 }

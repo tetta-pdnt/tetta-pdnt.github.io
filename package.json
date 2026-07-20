@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "npm run submodules:check && node scripts/dev.mjs",
-    "build": "npm run submodules:check && node scripts/build-feed.mjs && ASTRO_TELEMETRY_DISABLED=1 astro build",
+    "build": "npm run submodules:check && ASTRO_TELEMETRY_DISABLED=1 astro build",
+    "data:update": "npm run submodules:check && node scripts/build-feed.mjs --sync-rss --assign-missing-ids",
     "preview": "ASTRO_TELEMETRY_DISABLED=1 astro preview --host 127.0.0.1",
     "submodules:init": "git submodule sync --recursive && git submodule update --init --recursive",
     "submodules:update": "git submodule sync --recursive && git submodule update --remote --merge",

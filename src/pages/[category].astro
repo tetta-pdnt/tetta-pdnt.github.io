@@ -1,13 +1,12 @@
 ---
 import "../styles/global.css";
-import { readFile } from "node:fs/promises";
-import path from "node:path";
-import categoryPayload from "../../public/data/categories.json";
+import { loadSiteData } from "../lib/site-data.js";
 import Breadcrumbs from "../components/Breadcrumbs.astro";
 
-export function getStaticPaths() {
+export async function getStaticPaths() {
+  const { categories: categoryData } = await loadSiteData();
   const categories = [
-    ...categoryPayload.categories
+    ...categoryData
       .filter((category) => !category.children && category.key !== "music"),
     { key: "all", all: true },
     { key: "misc", fallback: true }
@@ -20,9 +19,9 @@ export function getStaticPaths() {
 }
 
 const { category } = Astro.props;
-const payload = JSON.parse(await readFile(path.join(process.cwd(), "public/data/items.json"), "utf8"));
+const { items: allItems } = await loadSiteData();
 const knownTags = ["video", "typography", "music", "prose", "novel", "vignette", "article", "poem", "dev"];
-const items = (payload.items ?? []).filter((item) =>
+const items = allItems.filter((item) =>
   category.all
     ? true
     : category.fallback

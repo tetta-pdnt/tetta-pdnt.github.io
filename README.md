@@ -1,6 +1,6 @@
 # tetta-pdnt.github.io
 
-Astroで管理するGitHub Pagesサイトです。YouTubeとSoundCloudのRSSをGitHub Actionsが定期取得し、`public/data/items.json` にまとめて公開します。
+Astroで管理するGitHub Pagesサイトです。YouTubeとSoundCloudのRSSをGitHub Actionsが定期取得し、`content/music.yaml` と `content/video.yaml` に新着項目を保存します。AstroはYAMLや外部コンテンツを直接読み、一覧用の `/data/items.json` を静的エンドポイントとして生成します。
 
 ## RSSを追加する
 
@@ -18,6 +18,12 @@ Astroで管理するGitHub Pagesサイトです。YouTubeとSoundCloudのRSSをG
   "type": "video",
   "tags": ["映像", "音楽"]
 }
+```
+
+RSSを手元で同期する場合は次を実行します。通常の `npm run build` と `npm run dev` はRSSを取得せず、ファイルも書き換えません。
+
+```bash
+npm run data:update
 ```
 
 ## externalの文章を表示する
@@ -101,4 +107,4 @@ npm run preview
 2. このディレクトリを `main` ブランチでpushします。
 3. Repository settingsの Pages で Source を `GitHub Actions` にします。
 
-以後、push時と6時間ごとのスケジュールでRSSが更新されます。
+以後、push時に現在のYAMLからデプロイされ、6時間ごとのスケジュールではRSS同期結果をYAMLへコミットしてからデプロイされます。
