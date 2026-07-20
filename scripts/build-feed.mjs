@@ -2,6 +2,7 @@ import { appendFile, readdir, readFile, writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import path from "node:path";
+import { categoryPathForTags } from "../src/lib/category-path.js";
 
 const PROJECT_ROOT = pathToFileURL(`${path.resolve(process.cwd())}${path.sep}`);
 const FEED_CONFIG = new URL("feeds.json", PROJECT_ROOT);
@@ -602,10 +603,9 @@ function pageUrlForSlug(slug) {
   return "/" + slug.split("/").map(encodeURIComponent).join("/") + "/";
 }
 
-function externalPageSlug(source, tags, id) {
-  const writingCategory = ["prose", "novel", "vignette", "article", "poem"].find((tag) => tags.includes(tag));
-  if (writingCategory) return `writing/${writingCategory}/${id}`;
-  if (tags.includes("typography")) return `typography/${id}`;
+function externalPageSlug(source, tags, id, categories) {
+  const categoryPath = categoryPathForTags(categories, tags);
+  if (categoryPath.length) return [...categoryPath, id].join("/");
   return `items/${slugPart(source)}/${id}`;
 }
 
@@ -700,7 +700,7 @@ async function assignMissingManualItemIds() {
   }
 }
 
-async function readExternalItems() {
+async function readExternalItems(categories) {
   const config = await readExternalConfig();
   const extensions = new Set(config.extensions ?? [".md", ".mdx", ".txt", ".phile"]);
   const excluded = new Set(config.exclude ?? []);
@@ -725,7 +725,7 @@ async function readExternalItems() {
         : (rootConfig.tags ?? config.tags ?? []));
       const source = data.source || rootConfig.source || root.name;
       const id = pageId(data.id, `External entry ${root.name}/${file}`);
-      const slug = externalPageSlug(source, tags, id);
+      const slug = externalPageSlug(source, tags, id, categories);
       const url = pageUrlForSlug(slug);
 
       const image = publicImagePath(data.image || imageFromMarkdown(body));
@@ -812,13 +812,13 @@ let cachedSiteData;
 export async function loadSiteData({ syncRss = false } = {}) {
   if (!syncRss && cachedSiteData) return cachedSiteData;
 
-  const [manualItems, externalData, typographyData, initialMusicData, initialVideoData, categories] = await Promise.all([
+  const categories = await readCategories();
+  const [manualItems, externalData, typographyData, initialMusicData, initialVideoData] = await Promise.all([
     readManualItems(),
-    readExternalItems(),
+    readExternalItems(categories),
     readTypographyItems(),
     readMusicItems(),
-    readVideoItems(),
-    readCategories()
+    readVideoItems()
   ]);
 
   let musicData = initialMusicData;

@@ -2,6 +2,8 @@
 import "../../styles/global.css";
 import Breadcrumbs from "../../components/Breadcrumbs.astro";
 import { renderMarkdown } from "../../lib/markdown.js";
+import { loadSiteData } from "../../lib/site-data.js";
+import { categoryPathForTags } from "../../lib/category-path.js";
 
 export function getStaticPaths() {
   return [];
@@ -11,11 +13,12 @@ const { page } = Astro.props;
 const published = page.publishedAt ? new Date(page.publishedAt).toLocaleDateString("ja-JP") : "undated";
 const bodyHtml = renderMarkdown(page.body, { imageBase: page.image });
 const hasBody = page.body.trim().length > 0;
-const writingCategory = ["prose", "novel", "vignette", "article", "poem"].find((tag) => page.tags.includes(tag));
-const category = writingCategory ? "writing" : page.tags.includes("typography") ? "typography" : page.tags[0];
-const breadcrumbs = writingCategory
-  ? [{ label: "writing", href: "/writing/" }, { label: writingCategory, href: `/writing/${writingCategory}/` }]
-  : category ? [{ label: category, href: `/${category}/` }] : [];
+const { categories } = await loadSiteData();
+const categoryPath = categoryPathForTags(categories, page.tags);
+const breadcrumbs = categoryPath.map((label, index) => ({
+  label,
+  href: `/${categoryPath.slice(0, index + 1).map(encodeURIComponent).join("/")}/`
+}));
 ---
 
 <html lang="ja">
